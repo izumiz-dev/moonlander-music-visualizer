@@ -54,6 +54,14 @@ static void compute_geometry(void) {
   geometry.initialized = true;
 }
 
+// === Smoothing State ===
+static struct {
+  float bass;
+  float mid;
+  float treble;
+  uint32_t last_update;
+} smoothed = { 0, 0, 0, 0 };
+
 // === RGB Matrix Effect ===
 
 bool musicviz(effect_params_t *params) {
@@ -70,13 +78,41 @@ bool musicviz(effect_params_t *params) {
     for (uint8_t i = 0; i < RGB_MATRIX_LED_COUNT; i++) {
         rgb_matrix_set_color(i, 0, 0, 0);
     }
+    // Reset smoothing when inactive
+    smoothed.bass = 0;
+    smoothed.mid = 0;
+    smoothed.treble = 0;
     return false;
   }
+
+  // --- Smoothing Logic ---
+  // The goal is to move smoothed.x towards (float)mv.x
+  // We use a simple exponential moving average, but we scale it by time 
+  // to be independent of the refresh rate of the RGB matrix.
+  float dt = (float)(now - smoothed.last_update) / 1000.0f;
+  if (dt > 0.1f) dt = 0.1f; // Cap delta to avoid jumps after pauses
+  smoothed.last_update = now;
+
+  // Smoothing factor: how fast to react. 
+  // Lowered to 12.0f for a more relaxed, "organic" feel.
+  const float lerp_factor = 12.0f; 
+  float k = lerp_factor * dt;
+  if (k > 1.0f) k = 1.0f;
+
+  smoothed.bass   += ((float)mv.bass   - smoothed.bass)   * k;
+  smoothed.mid    += ((float)mv.mid    - smoothed.mid)    * k;
+  smoothed.treble += ((float)mv.treble - smoothed.treble) * k;
   
-  // Audio levels (0–255) -> radii
-  const float bass_r   = (float)mv.bass   * 100.0 / 255.0;
-  const float mid_r    = (float)mv.mid    *  70.0 / 255.0;
-  const float treble_r = (float)mv.treble *  40.0 / 255.0;
+  // Audio levels (smoothed) -> radii
+  // Apply Square Curve (Gamma 2.0) to make the expansion feel more "fluid" and less abrupt at startup.
+  // Input (0..255) -> Norm (0..1) -> Square -> Scale
+  float b_n = smoothed.bass / 255.0f;
+  float m_n = smoothed.mid / 255.0f;
+  float t_n = smoothed.treble / 255.0f;
+
+  const float bass_r   = (b_n * b_n) * 110.0f; // Slightly increased max range to compensate for curve
+  const float mid_r    = (m_n * m_n) *  80.0f;
+  const float treble_r = (t_n * t_n) *  50.0f;
   
   // Hues to RGB
   RGB rgb_b = hsv_to_rgb_u8(mv.hue_bass, mv.saturation, 255);

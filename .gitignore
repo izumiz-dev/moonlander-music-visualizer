@@ -34,3 +34,4 @@ firmware/oryx_source/*
 
 !.serena/project.yml
 !.serena/memories/
+\ntemporary/

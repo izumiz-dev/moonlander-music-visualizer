@@ -2,6 +2,7 @@ import time
 import colorsys
 import collections
 import random
+import math
 from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
@@ -19,6 +20,7 @@ class TerminalDashboard:
     - Borderless, clean aesthetic.
     - Central Spectrum Visualizer (Density Optimized).
     - Compact footer info.
+    - Track Info display.
     """
     
     def __init__(self):
@@ -27,6 +29,11 @@ class TerminalDashboard:
         
         # History for Sparkline (last 50 frames)
         self.loudness_history = collections.deque([0.0] * 50, maxlen=50)
+        
+        # Text animation state
+        self.text_phase = 0.0
+        self.marquee_offset = 0
+        self.last_track_name = ""
         
         # Split layout: Header / Body / Footer
         self.layout.split(
@@ -104,7 +111,7 @@ class TerminalDashboard:
         bar = "█" * w + "░" * (width - w)
         return Text(bar, style=color)
 
-    def update(self, features, palette_name, device_name, hues=(0, 0, 0), saturation=255):
+    def update(self, features, palette_name, device_name, track_name, hues=(0, 0, 0), saturation=255):
         """Update and return the layout."""
         
         h_b, h_m, h_t = hues
@@ -112,13 +119,45 @@ class TerminalDashboard:
         c_m = self._hue_to_hex(h_m, saturation)
         c_t = self._hue_to_hex(h_t, saturation)
         
-        # Header (Minimal)
-        header_text = Text.assemble(
+        # Header (Minimal + Pulsating Track Info)
+        left_text = Text.assemble(
             (" MOONLANDER ", "bold black on white"),
-            (f"  SCENE: {palette_name}  ", f"bold white on {c_t}"),
-            (f"  DEV: {device_name}  ", "dim white")
+            (f"  SCENE: {palette_name}  ", f"bold white on {c_t}")
         )
-        self.layout["header"].update(Align.center(header_text, vertical="middle"))
+        
+        # Pulsating color between Bass and Treble hues
+        self.text_phase = (self.text_phase + 0.05) % (math.pi * 2)
+        blend = (math.sin(self.text_phase) + 1.0) / 2.0
+        h_mix = int(h_b * (1.0 - blend) + h_t * blend)
+        c_mix = self._hue_to_hex(h_mix, saturation)
+
+        # Marquee Logic
+        display_width = 50
+        track_display = track_name
+        
+        if track_name != self.last_track_name:
+            self.marquee_offset = 0
+            self.last_track_name = track_name
+            
+        if len(track_name) > display_width:
+            # Add padding for loop
+            padded = track_name + "   ***   " 
+            # Scroll speed control (0.2 chars per frame approx)
+            idx = int(self.marquee_offset) % len(padded)
+            
+            # Slice with wrap-around
+            track_display = (padded * 2)[idx : idx + display_width]
+            
+            self.marquee_offset += 0.2
+            
+        right_text = Text(f" ♫ {track_display} ", style=f"bold {c_mix}")
+
+        header_grid = Table.grid(expand=True)
+        header_grid.add_column(justify="left")
+        header_grid.add_column(justify="right")
+        header_grid.add_row(left_text, right_text)
+
+        self.layout["header"].update(Align.center(header_grid, vertical="middle"))
 
         # Body: Spectrum Visualizer
         center_width = self.console.size.width * 0.6

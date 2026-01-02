@@ -1,0 +1,21 @@
+[tools]
+python = "3.11"
+
+[env]
+_.python.venv = { path = ".venv", create = true }
+
+[tasks.install]
+description = "Install Python dependencies into venv"
+run = "python -m ensurepip && python -m pip install -U pip && pip install -r requirements.txt"
+
+[tasks.list-devices]
+description = "List available audio devices and find BlackHole"
+run = "python -m moonlander_musicviz.list_devices"
+
+[tasks.run]
+description = "Start the music visualizer (capture audio → send to Moonlander)"
+run = "python -m moonlander_musicviz.main"
+
+[tasks.clean]
+description = "Remove venv and cache"
+run = "rm -rf .venv __pycache__ *.pyc moonlander_musicviz/__pycache__"

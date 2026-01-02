@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+
+# Python / Host
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+build/
+
+# QMK / Firmware Artifacts
+*.hex
+*.bin
+*.uf2
+*.qmk
+.build/
+obj/
+
+# User Oryx Source (Ignore downloaded folders)
+firmware/oryx_source/*
+!firmware/oryx_source/README.md
+
+# Moonlander Firmware Integrated (Keep this as reference?)
+# Intentionally NOT ignoring firmware/moonlander_musicviz_integrated so it serves as the reference.
+
+# IDEs
+.vscode/
+.idea/
+
+# serena
+
+.serena/*
+
+!.serena/project.yml
+!.serena/memories/

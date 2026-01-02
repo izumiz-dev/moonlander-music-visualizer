@@ -90,12 +90,7 @@ static void compute_perimeter(void) {
   }
 }
 
-static bool is_perimeter_led(uint8_t i) {
-  for (uint8_t j = 0; j < perimeter.count; j++) {
-    if (perimeter.led_indices[j] == i) return true;
-  }
-  return false;
-}
+
 
 
 
@@ -206,40 +201,46 @@ bool musicviz(effect_params_t *params) {
     
     int r_out = 0, g_out = 0, b_out = 0;
     
-    // --- Bass layer (warm red/orange) ---
+    // --- Layer 1: Central Waves (Bass/Mid/Treble) ---
+    // These expand from the center (cx, cy)
     if (r <= bass_r) {
-      float k = (bass_r - r) / (bass_r + 1e-3);  // falloff from center
+      float k = (bass_r - r) / (bass_r + 1e-3);
       r_out += (int)(rgb_b.r * k);
       g_out += (int)(rgb_b.g * k);
       b_out += (int)(rgb_b.b * k);
     }
-    
-    // --- Mid layer (green) ---
     if (r <= mid_r) {
       float k = (mid_r - r) / (mid_r + 1e-3);
       r_out += (int)(rgb_m.r * k);
       g_out += (int)(rgb_m.g * k);
       b_out += (int)(rgb_m.b * k);
     }
-    
-    // --- Treble layer + perimeter sparkles (blue) ---
     if (r <= treble_r) {
       float k = (treble_r - r) / (treble_r + 1e-3);
       r_out += (int)(rgb_t.r * k);
       g_out += (int)(rgb_t.g * k);
       b_out += (int)(rgb_t.b * k);
     }
-    
-    
-    // --- Perimeter Glow (Restored & Palette-Aware) ---
-    // Instead of hardcoded cyan, use the Treble color from the current palette.
-    if (is_perimeter_led(i)) {
-      float k = (float)mv.treble / 255.0f * 0.7f; // 70% intensity max
-      r_out += (int)(rgb_t.r * k);
-      g_out += (int)(rgb_t.g * k);
-      b_out += (int)(rgb_t.b * k);
-    }
 
+    // --- Layer 2: Inward Edge Glow (Restored & Enhanced) ---
+    // Light bleeds from the perimeter inwards.
+    // We use the distance from the outer edge (max_r - r).
+    float dist_from_edge = perimeter.max_r - r;
+    // Glow reaches about 40% into the keyboard from the edge.
+    float glow_range = perimeter.max_r * 0.4f; 
+    
+    if (dist_from_edge < glow_range) {
+      // Glow intensity based on Treble (high energy)
+      float intensity = (1.0f - (dist_from_edge / glow_range)) * ((float)mv.treble / 255.0f);
+      intensity *= 0.8f; // Cap glow contribution
+
+      // Additive blend: the glow mixes with the central waves.
+      // If waves are Red and Glow is Blue, we get Purple in the middle.
+      r_out += (int)(rgb_t.r * intensity);
+      g_out += (int)(rgb_t.g * intensity);
+      b_out += (int)(rgb_t.b * intensity);
+    }
+    
     // --- Laser Beams (Horizontal) ---
     for (int s = 0; s < MAX_LASERS; s++) {
         if (!lasers[s].active) continue;

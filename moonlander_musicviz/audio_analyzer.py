@@ -27,11 +27,21 @@ class AudioAnalyzer:
         self.env_loudness = Envelope(attack=0.50, release=0.10)
         
         # Adaptive normalization
-        self.peak_tracks = {'bass': 0.01, 'mid': 0.01, 'treble': 0.01, 'rms': 0.01}
+        self.peak_tracks = {
+            'bass': 0.01, 'mid': 0.01, 'treble': 0.01, 'rms': 0.01,
+            'kick': 0.01, 'snare': 0.01, 'hihat': 0.01
+        }
         
-        # Beat detection
+        # Rhythm detection state (prev_val, frames_since_onset)
+        self.rhythm_state = {
+            'kick':  {'prev': 0.0, 'timer': 0},
+            'snare': {'prev': 0.0, 'timer': 0},
+            'hihat': {'prev': 0.0, 'timer': 0}
+        }
+        
+        # Beat detection (legacy support for BPM)
         self.beat_history = []
-        self.beat_history_len = int(2.0 * sr / hop)  # ~2 seconds
+        self.beat_history_len = int(2.0 * sr / hop)
         self.prev_bass = 0.0
         
         # Circular buffer for FFT
@@ -62,48 +72,66 @@ class AudioAnalyzer:
         # Loudness (RMS)
         rms = float(np.sqrt(np.mean(windowed * windowed)) + 1e-12)
         
-        # Band energies (Log scaling will be applied via normalization)
-        # Wider range for Treble to catch "air"
-        bass_raw = self._band_energy(mag, freqs, 20, 120)
-        mid_raw = self._band_energy(mag, freqs, 120, 4000)
-        treble_raw = self._band_energy(mag, freqs, 4000, 20000)
+        # === Visual Bands (Smoothed) ===
+        # Expert Optimized Crossover:
+        # Bass: 40-150Hz -> Kick & Bass guitar core
+        # Mid: 150-2500Hz -> Vocal body, snare body, guitar mids
+        # Treble: 2500-20000Hz -> Snare snap, hi-hats, vocal air, lead synths/guitars
+        bass_raw = self._band_energy(mag, freqs, 40, 150)
+        mid_raw = self._band_energy(mag, freqs, 150, 2500)
+        treble_raw = self._band_energy(mag, freqs, 2500, 20000)
         
-        # Adaptive normalization with Log-like boost for quiet sounds
+        # === Rhythm Bands (Transient Only) ===
+        # Expert Tuning:
+        # Kick: 60-150Hz -> Cut sub-bass rumble, focus on attack.
+        # Snare: 1.5-4kHz -> Cut vocal/body resonance, focus on "snap" noise.
+        # HiHat: 8-16kHz -> Standard high frequency range.
+        kick_raw  = self._transient_energy(mag, freqs, 60, 150)
+        snare_raw = self._transient_energy(mag, freqs, 1500, 4000)
+        hihat_raw = self._transient_energy(mag, freqs, 8000, 16000)
+
+        # Adaptive normalization
         pt = self.peak_tracks
-        # Decay factor 0.995 is slower, keeping the "ceiling" high for longer (better dynamics)
-        decay = 0.995
-        pt['bass'] = max(pt['bass'] * decay, bass_raw)
-        pt['mid'] = max(pt['mid'] * decay, mid_raw)
-        pt['treble'] = max(pt['treble'] * decay, treble_raw)
-        pt['rms'] = max(pt['rms'] * decay, rms)
         
-        # Normalize: (val / peak) ^ 0.75 -> Moderate boost (more contrast than sqrt)
+        # Expert Review Tuning:
+        # Visual bands need slow decay (0.995) for smooth gain control.
+        # Rhythm bands need faster decay (0.990) to follow dynamic changes and breaks.
+        for k, v in [('bass', bass_raw), ('mid', mid_raw), ('treble', treble_raw), ('rms', rms)]:
+            pt[k] = max(pt[k] * 0.995, v)
+        for k, v in [('kick', kick_raw), ('snare', snare_raw), ('hihat', hihat_raw)]:
+            pt[k] = max(pt[k] * 0.990, v)
+        
         def norm(v, p):
             return np.clip(np.power(v / (p + 1e-6), 0.75), 0.0, 1.0)
 
+        # Normalize Visual Bands
         bass_n = norm(bass_raw, pt['bass'])
         mid_n = norm(mid_raw, pt['mid'])
         treble_n = norm(treble_raw, pt['treble'])
         rms_n = norm(rms, pt['rms'])
         
-        # Apply envelopes
+        # Normalize Rhythm Bands
+        kick_n = norm(kick_raw, pt['kick'])
+        snare_n = norm(snare_raw, pt['snare'])
+        hihat_n = norm(hihat_raw, pt['hihat'])
+
+        # Apply envelopes for Visuals
         bass_e = self.env_bass.update(bass_n)
         mid_e = self.env_mid.update(mid_n)
         treble_e = self.env_treble.update(treble_n)
         
-        # Loudness: Keep it linear to preserve dynamics (quiet is quiet, loud is loud)
-        # Faster release for crisp silence
         self.env_loudness.release = 0.2
         loudness_e = self.env_loudness.update(rms_n)
         
-        # Beat detection (bass transient + dynamic threshold)
-        self.beat_history.append(bass_e)
-        if len(self.beat_history) > self.beat_history_len:
-            self.beat_history.pop(0)
+        # === Rhythm Detection ===
+        is_kick  = self._detect_onset('kick', kick_n, threshold=0.10, refractory=4)
+        is_snare = self._detect_onset('snare', snare_n, threshold=0.12, refractory=3)
+        is_hihat = self._detect_onset('hihat', hihat_n, threshold=0.10, refractory=2)
+
+        # Legacy Beat support (aliased to Kick)
+        beat = is_kick
         
-        beat = self._detect_beat(bass_e, threshold=0.15)
-        
-        # BPM Estimation
+        # BPM Estimation (using Kick)
         if beat > 0.5:
             now = time.time()
             if hasattr(self, 'last_beat_time'):
@@ -127,16 +155,20 @@ class AudioAnalyzer:
             'mid': np.clip(mid_e, 0.0, 1.0),
             'treble': np.clip(treble_e, 0.0, 1.0),
             'beat': beat,
+            'kick': beat,   # Alias for consistency
+            'snare': is_snare,
+            'hihat': is_hihat,
             'bpm': bpm
         }
         
+        # Legacy support
         self.prev_bass = bass_e
         return features
     
     def _band_energy(self, mag, freqs, f0, f1):
         """
-        Compute band energy using Peak/Mean mix.
-        This captures sharp transients (hi-hats) better.
+        Compute band energy using Peak/Mean mix for VISUALIZATION.
+        Smoothed response for LED radii.
         """
         idx = (freqs >= f0) & (freqs < f1)
         if not np.any(idx):
@@ -144,40 +176,44 @@ class AudioAnalyzer:
         
         band_mag = mag[idx]
         
-        # Mix of Mean (sustain) and Max (transient)
-        # Treble needs more Peak weight to catch hi-hats
-        if f0 > 2000:
-            val = 0.3 * np.mean(band_mag) + 0.7 * np.max(band_mag)
-        else:
-            val = 0.7 * np.mean(band_mag) + 0.3 * np.max(band_mag)
-            
+        # Balanced mix for smooth visuals
+        val = 0.6 * np.mean(band_mag) + 0.4 * np.max(band_mag)
         return float(val)
+
+    def _transient_energy(self, mag, freqs, f0, f1):
+        """
+        Compute band energy using ONLY Peak for RHYTHM DETECTION.
+        Ignores sustain/rumble, captures attack transients.
+        """
+        idx = (freqs >= f0) & (freqs < f1)
+        if not np.any(idx):
+            return 0.0
+        
+        band_mag = mag[idx]
+        
+        # 100% Peak to catch transients
+        return float(np.max(band_mag))
     
-    def _detect_beat(self, bass_now, threshold=0.08):
+    def _detect_onset(self, name, val_now, threshold=0.10, refractory=4):
         """
-        Aggressive onset detection: triggers on rapid rise in bass energy.
+        Generic onset detector using flux (rapid rise) and refractory period.
         """
-        # Calculate flux (positive change)
-        flux = bass_now - self.prev_bass
+        state = self.rhythm_state[name]
         
-        # Debugging beat detection (Verbose)
-        # print(f"DEBUG: bass={bass_now:.2f} prev={self.prev_bass:.2f} flux={flux:.2f} thresh={threshold}")
+        # Calculate flux
+        flux = val_now - state['prev']
+        state['prev'] = val_now
         
-        # Check if flux exceeds threshold and we are past refractory period
-        is_beat = False
+        is_onset = False
         if flux > threshold:
-            if not hasattr(self, 'frames_since_beat'):
-                self.frames_since_beat = 10
-            
-            if self.frames_since_beat > 5: # ~150ms at 30fps
-                is_beat = True
-                self.frames_since_beat = 0
-                # print("DEBUG: >>> BEAT DETECTED <<<")
+            if state['timer'] > refractory:
+                is_onset = True
+                state['timer'] = 0
         
-        if hasattr(self, 'frames_since_beat'):
-            self.frames_since_beat += 1
-            
-        return 1.0 if is_beat else 0.0
+        state['timer'] += 1
+        return 1.0 if is_onset else 0.0
+
+        # Note: BPM estimation logic in update() handles the rest.
 
 
 class Envelope:

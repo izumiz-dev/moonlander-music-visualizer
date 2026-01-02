@@ -75,5 +75,18 @@ This project is designed to "inject" the visualizer into your existing Oryx layo
 
 ## ⚠️ Notes
 
--   **Audio Setup:** Ensure "BlackHole 2ch" is set as your system output (or part of a Multi-Output Device) so the visualizer can "hear" the system audio.
 -   **Performance:** Screen capture is optimized (downsampled) to maintain ~30fps with minimal CPU usage.
+
+<details>
+<summary><b>🎧 Audio Setup Details (macOS Stability)</b></summary>
+
+To prevent audio stuttering or "pops" when using BlackHole with a Multi-Output Device, follow these precise steps in **Audio MIDI Setup**:
+
+1.  **Create Multi-Output Device:** Click the `+` icon and select `Create Multi-Output Device`.
+2.  **Master Device:** Set the **Master Device** (or Clock Source) to your **physical hardware** (e.g., *External Headphones*, *MacBook Pro Speakers*, or *DAC*). Never set BlackHole as the master.
+3.  **Drift Correction:** Enable **Drift Correction** for **BlackHole 2ch** only. Keep it disabled for your master physical device.
+4.  **Sample Rate:** Ensure all sub-devices within the Multi-Output Device are set to the same sample rate (e.g., **48,000 Hz**).
+5.  **Device Order:** In the list of sub-devices, ensure your physical device is checked *first* so it appears at the top of the internal OS list.
+
+This configuration ensures that the virtual driver (BlackHole) stays perfectly synced with your hardware's clock, providing a lag-free and glitch-free experience.
+</details>

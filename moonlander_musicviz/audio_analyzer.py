@@ -131,22 +131,6 @@ class AudioAnalyzer:
         # Legacy Beat support (aliased to Kick)
         beat = is_kick
         
-        # BPM Estimation (using Kick)
-        if beat > 0.5:
-            now = time.time()
-            if hasattr(self, 'last_beat_time'):
-                interval = now - self.last_beat_time
-                if 0.3 < interval < 2.0:  # 30-200 BPM range
-                    if not hasattr(self, 'intervals'): self.intervals = []
-                    self.intervals.append(interval)
-                    if len(self.intervals) > 8: self.intervals.pop(0)
-            self.last_beat_time = now
-        
-        bpm = 0
-        if hasattr(self, 'intervals') and len(self.intervals) > 0:
-            avg_interval = sum(self.intervals) / len(self.intervals)
-            bpm = 60.0 / avg_interval
-
         # Clamp to 0–1
         features = {
             'loudness_rms': np.clip(loudness_e, 0.0, 1.0),
@@ -155,10 +139,9 @@ class AudioAnalyzer:
             'mid': np.clip(mid_e, 0.0, 1.0),
             'treble': np.clip(treble_e, 0.0, 1.0),
             'beat': beat,
-            'kick': beat,   # Alias for consistency
+            'kick': beat,
             'snare': is_snare,
-            'hihat': is_hihat,
-            'bpm': bpm
+            'hihat': is_hihat
         }
         
         # Legacy support

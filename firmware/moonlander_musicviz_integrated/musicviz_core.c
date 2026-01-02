@@ -2,6 +2,9 @@
 #include "raw_hid.h"
 #include <string.h>
 
+// Dummy definition to satisfy linker when ORYX_ENABLE=no
+uint8_t webhid_leds = 0;
+
 // Global instance (forward declared in musicviz.h if needed, or just exposed here)
 musicviz_state_t mv = {0};
 

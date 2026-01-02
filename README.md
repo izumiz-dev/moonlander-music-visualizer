@@ -1,92 +1,79 @@
 # Moonlander Music Visualizer
 
-This project transforms your **ZSA Moonlander** keyboard into a high-performance, low-latency music visualizer. It analyzes computer audio in real-time (Bass, Mid, Treble, Beats) and sends the data to the keyboard via Raw HID to drive stunning custom RGB effects.
+This project transforms your **ZSA Moonlander** keyboard into a high-performance, low-latency music and screen visualizer. It analyzes computer audio (Bass, Mid, Treble) and screen content in real-time to drive stunning custom RGB effects.
 
 ## Features
 
--   **3-Band Analysis:** Separates audio into Bass, Mid, and Treble envelopes.
--   **Laser Beams (Treble):** Fast, horizontal white laser beams that shoot across the keyboard when high frequencies hit. (New!)
--   **Perimeter Glow (Treble):** The edges (wings) of the keyboard glow blue/white in sync with treble, acting as a frame.
--   **Shockwave (Kick/Beat):** A radial magenta/white shockwave expands from the center on every beat.
--   **Visualizer Zones:**
-    -   Center: Bass (Red/Warm) -> Mid (Green) -> Treble (Blue) radial gradient.
--   **Adaptive Normalization:** Automatically adjusts to volume changes to maximize dynamic range.
--   **High Performance:** 60 FPS target with optimized Python analysis (NumPy) and C firmware rendering.
+-   **Screen Color Sync (New!):** Captures your main display's dominant colors in real-time and syncs the keyboard backlight to match the mood of movies or MVs.
+-   **Symmetric Radial Waves:** Colors expand symmetrically from the center of the split keyboard (USB connection side) outwards, creating a seamless, unified look even when the halves are separated.
+-   **3-Band Audio Analysis:** Accurately separates audio into Bass, Mid, and Treble envelopes to modulate brightness and wave spread.
+-   **Adaptive Brightness:** Audio loudness modulates the overall master brightness for dynamic contrast.
+-   **High Performance:** Optimized Python backend (NumPy, MSS) and efficient QMK C firmware rendering.
 
 ## Directory Structure
 
 ```
 .
-├── moonlander_musicviz/            # [Host] Python Audio Analyzer & HID Sender
-│   ├── audio_analyzer.py           # FFT & Beat Detection Logic
-│   └── main.py                     # Application Entry Point
+├── moonlander_musicviz/            # [Host] Python App
+│   ├── audio_analyzer.py           # FFT Logic
+│   ├── screen_analyzer.py          # Screen Capture & Color Extraction
+│   ├── hid_sender.py               # Raw HID Communication
+│   └── main.py                     # CLI Entry Point
 ├── firmware/
-│   └── moonlander_musicviz_integrated/ # [Firmware] Complete Working Example Keymap
-├── portable_musicviz/              # [Library] Portable files for YOUR custom keymap
+│   └── oryx_source/                # [Input] Place your Oryx source zip contents here
+├── portable_musicviz/              # [Library] The Visualizer Logic (C Code)
 │   ├── musicviz.h                  # State definition
-│   ├── musicviz_core.c             # Raw HID communication logic
 │   ├── rgb_matrix_user.inc         # Visualizer Effect Implementation
-│   └── rules.inc.mk                # Build rule snippets
-└── build_firmware.sh               # Helper script to build the reference firmware
+│   └── rules.inc.mk                # Build rules
+└── build_firmware.sh               # Auto-build script (Merges Oryx source + Musicviz)
 ```
 
----
+## 🚀 Installation & Usage
 
-## 🚀 How to Use (For Users / Porting)
+### 1. Host Side (Python)
 
-If you have your own custom QMK keymap and want to **add** this visualizer to it:
+**Requirements:**
+-   Python 3.11+
+-   [BlackHole 2ch](https://github.com/ExistentialAudio/BlackHole) (for audio loopback on macOS)
 
-1.  **Copy Files:** Copy the contents of `portable_musicviz/` into your keymap directory (e.g., `qmk_firmware/keyboards/zsa/moonlander/keymaps/YOUR_NAME/`).
-2.  **Edit `rules.mk`:** Add the contents of `rules.inc.mk` to your `rules.mk`.
-    ```makefile
-    RAW_ENABLE = yes
-    RGB_MATRIX_CUSTOM_USER = yes
-    SRC += musicviz_core.c
-    ```
-3.  **Edit `keymap.c`:**
-    -   Include the header: `#include "musicviz.h"`
-    -   (Optional) If you use `keyboard_post_init_user`, ensure `rgb_matrix_enable()` is called.
-4.  **Edit `rgb_matrix_user.inc` (if you have one):**
-    -   Include the visualizer effect file: `#include "rgb_matrix_user.inc"` (Rename strictly if needed to avoid conflicts, or merge manually).
-    -   *Note:* The provided `rgb_matrix_user.inc` contains the full effect logic wrapped in `RGB_MATRIX_EFFECT(musicviz)`.
-5.  **Compile & Flash:** Compile your keymap as usual.
+**Setup:**
+```bash
+# Install Python dependencies
+pip install -r requirements.txt
+```
 
-## 🔄 How to Update Your Layout (Oryx)
+**Run:**
 
-When you update your keymap layout on Oryx (e.g., change keys, layers):
-
-1.  **Download Source:** Get the source zip from Oryx.
-2.  **Place:** Unzip it into `firmware/oryx_source/`.
-3.  **Integrate:** Copy the files from `portable_musicviz/` into that new folder.
-4.  **Edit:** Apply the 3 lines of changes (`rules.mk`, `keymap.c`, `rgb_matrix_user.inc`) again.
-5.  **Build:** Using the integrated script or Standard QMK workflow with the new folder path.
-
-## 🛠️ How to Build (Reference Implementation)
-
-If you just want to try it out using the provided configuration (requires `qmk` installed):
-
-1.  **Setup:** Ensure `qmk_firmware` is cloned at `~/qmk_firmware`.
-2.  **Build:** Run the helper script:
+*   **Music Mode (Default):**
+    Analyzes audio and uses preset color palettes.
     ```bash
-    ./build_firmware.sh
-    ```
-    This will copy the reference implementation to QMK and compile it.
-3.  **Flash:** Use [Keymapp](https://blog.zsa.io/keymapp/) or `qmk flash` with the generated `.bin` file.
-
-## 🎧 Information for Host (Python)
-
-1.  **Install Dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-    (Requires `numpy`, `sounddevice`, `hidapi` implementation)
-
-2.  **Run:**
-    ```bash
-    # Ensure audio loopback (e.g. BlackHole) is set as default input or selected
     python -m moonlander_musicviz.main
     ```
 
-3.  **Troubleshooting:**
-    -   If "HID device not found": Ensure no other process (like Keymapp or a zombie python script) has the device open. Use `ps aux | grep python` to check.
-    -   Audio input: The script uses the default system input. On Mac, use BlackHole 2ch and set it as the output for your Music app and Input for the script (via Aggregate Device or simple selection).
+*   **Screen Sync Mode:**
+    Analyzes audio for rhythm *AND* captures screen colors for the palette.
+    ```bash
+    python -m moonlander_musicviz.main --screen
+    ```
+
+### 2. Firmware Side (Moonlander)
+
+This project is designed to "inject" the visualizer into your existing Oryx layout.
+
+1.  **Export Source:** Download your layout source code from [Oryx](https://configure.zsa.io).
+2.  **Place:** Unzip the folder into `firmware/oryx_source/`.
+3.  **Build:** Run the build script. It automatically finds your source, injects the visualizer code, and compiles.
+    ```bash
+    ./build_firmware.sh
+    ```
+4.  **Flash:** Use [Keymapp](https://blog.zsa.io/keymapp/) or `qmk flash` with the generated `.bin` file in `~/qmk_firmware/`.
+
+## ⚙️ Technical Details
+
+-   **Symmetry Logic:** The firmware automatically calculates the "inner edges" of both keyboard halves to ensure the light waves expand perfectly symmetrically from the center, regardless of how far apart you place the units.
+-   **Vivid Colors:** In Screen Sync mode, the analyzer boosts the saturation of captured colors, ensuring the keyboard always lights up with vivid, distinct colors even during dark or pale scenes.
+
+## ⚠️ Notes
+
+-   **Audio Setup:** Ensure "BlackHole 2ch" is set as your system output (or part of a Multi-Output Device) so the visualizer can "hear" the system audio.
+-   **Performance:** Screen capture is optimized (downsampled) to maintain ~30fps with minimal CPU usage.

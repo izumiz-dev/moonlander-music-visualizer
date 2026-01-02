@@ -49,13 +49,14 @@ class HIDSender:
             "Ensure Moonlander is connected and firmware is flashed with RAW_ENABLE=yes."
         )
     
-    def send_packet(self, audio_features, hue_bass=160, hue_mid=40, hue_treble=220):
+    def send_packet(self, audio_features, hue_bass=160, hue_mid=40, hue_treble=220, saturation=255):
         """
         Send a music visualizer packet to the Moonlander.
         
         Args:
             audio_features: dict with keys bass, mid, treble, loudness_rms, loudness_peak, beat (all 0–1)
             hue_*: hue values (0–255) for each band
+            saturation: global saturation (0-255)
         
         Returns:
             True if successful, False on error
@@ -90,7 +91,7 @@ class HIDSender:
             pkt[10] = hue_bass
             pkt[11] = hue_mid
             pkt[12] = hue_treble
-            pkt[13] = 255      # saturation
+            pkt[13] = saturation
             pkt[14] = 128      # fx_speed (unused)
             pkt[15] = int(audio_features['beat'] * 255)  # shockwave_strength
             pkt[16] = int(audio_features['treble'] * 200)  # perimeter_sparkle (0–200)

@@ -231,14 +231,13 @@ bool musicviz(effect_params_t *params) {
     }
     
     
-    // --- Perimeter Glow (Restored) ---
-    // User requested "Vertical LEDs on both ends" to be visible (not degraded).
-    // We light them up based on Treble intensity (blue-ish glow).
+    // --- Perimeter Glow (Restored & Palette-Aware) ---
+    // Instead of hardcoded cyan, use the Treble color from the current palette.
     if (is_perimeter_led(i)) {
-      uint8_t glow = (uint8_t)((float)mv.treble * 0.6); // 60% brightness max
-      // Add blue/cyan tint
-      b_out += glow;
-      g_out += glow / 2;
+      float k = (float)mv.treble / 255.0f * 0.7f; // 70% intensity max
+      r_out += (int)(rgb_t.r * k);
+      g_out += (int)(rgb_t.g * k);
+      b_out += (int)(rgb_t.b * k);
     }
 
     // --- Laser Beams (Horizontal) ---

@@ -114,18 +114,14 @@ bool musicviz(effect_params_t *params) {
   bool alive = (now - mv.last_rx_ms) <= 500;
   
   if (!mv.enabled || !alive) {
-    // Fade to black quickly
-    // if (rgb_matrix_check_finished_leds(params)) {
-      for (uint8_t i = 0; i < RGB_MATRIX_LED_COUNT; i++) {
+    for (uint8_t i = 0; i < RGB_MATRIX_LED_COUNT; i++) {
         rgb_matrix_set_color(i, 0, 0, 0);
-      }
-    // }
-    return true;
-    return true;
+    }
+    return false;
   }
   
-  // Spatial origin (Moonlander center from keyboard.json)
-  const int cx = 120, cy = 36;
+  // Moonlander center point (per Perplexity research: 112, 32)
+  const int cx = 112, cy = 32;
   
   // === Convert audio levels (0–255) to spatial radii ===
   // Bass: wide spread (up to 100 units from center)

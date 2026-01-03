@@ -197,7 +197,7 @@ def main():
                     sender.send_packet(features, hue_bass=h_b, hue_mid=h_m, hue_treble=h_t, saturation=final_saturation)
                     
                     # Update Dashboard
-                    live.update(dashboard.update(features, current_p_name, device_name, current_track_name, hues=(h_b, h_m, h_t)))
+                    live.update(dashboard.update(features, current_p_name, device_name, current_track_name, hues=(h_b, h_m, h_t), saturation=final_saturation))
                     
                     last_update = now
                     frame_count += 1

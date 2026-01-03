@@ -43,13 +43,12 @@ class ScreenAnalyzer:
             
             base_hue = int(h * 255)
             
-            # AGGRESSIVE VIVID LOGIC:
-            # If there's any detectable color (s > 0.01), force saturation to MAX (255).
-            # This ignores the "paleness" of the screen and gives you pure colors.
-            if s > 0.01:
-                saturation = 255
-            else:
-                saturation = 0
+            # AGGRESSIVE VIVID LOGIC (Refined):
+            # Boost saturation to avoid washed out colors.
+            # Use a steep ramp instead of a hard step.
+            # s=0.0 -> sat=0 (White)
+            # s=0.01 -> sat=255 (Vivid)
+            saturation = int(min(255, s * 25500))
             
             # Create an analogous palette
             offset = 21

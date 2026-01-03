@@ -48,16 +48,27 @@ This project transforms your **ZSA Moonlander** keyboard into a high-performance
 pip install -r requirements.txt
 ```
 
-**Run:**
+**Run via Mise (Recommended):**
+
+*   **Music Mode (Live):**
+    ```bash
+    mise run live
+    ```
+
+*   **Digital Twin Simulator:** 
+    Simulate LED effects in the terminal without hardware.
+    ```bash
+    mise run sim
+    ```
+
+**Manual Run:**
 
 *   **Music Mode (Default):**
-    Analyzes audio and uses preset color palettes.
     ```bash
     python -m moonlander_musicviz.main
     ```
 
 *   **Screen Sync Mode:**
-    Analyzes audio for rhythm *AND* captures screen colors for the palette.
     ```bash
     python -m moonlander_musicviz.main --screen
     ```

@@ -1,5 +1,8 @@
-description = "Consults the policy for deciding between Host (Python) and Firmware (C) for LED logic implementation."
-prompt = """
+---
+description: >-
+  Consults the policy for deciding between Host (Python) and Firmware (C) for
+  LED logic implementation.
+---
 You are an expert embedded systems and Python developer. Your task is to evaluate a proposed LED effect for the ZSA Moonlander and decide whether it should be implemented in the Host-side Python code or the Firmware-side C code.
 
 Refer to the following criteria and hardware specs:
@@ -32,5 +35,5 @@ Refer to the following criteria and hardware specs:
     - **Host:** Analyze audio/screen and send high-level "Control Parameters" (e.g., Target Brightness, Hue, Wave Speed) via HID (32-byte packets).
     - **Firmware:** Use these parameters to drive the actual `rgb_matrix_set_color` calls.
 
-Analyze the user's request: {{args}}
-Provide a recommendation on where to implement the logic and justify it based on the criteria above."""
+Analyze the user's request: [INPUT]
+Provide a recommendation on where to implement the logic and justify it based on the criteria above.

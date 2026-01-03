@@ -109,16 +109,16 @@ class AudioAnalyzer:
         pt = self.peak_tracks
         
         # Expert Review Tuning:
-        # Visual bands need faster recovery (0.985) to adapt to drops and transitions.
-        # Rhythm bands need snappy recovery (0.980) to ensure impact isn't lost.
+        # Visual bands need slower recovery (0.998) for more stable brightness.
+        # Rhythm bands need snappy recovery (0.990) to ensure impact isn't lost.
         for k, v in [('bass', bass_raw), ('mid', mid_raw), ('treble', treble_raw), ('rms', rms)]:
-            pt[k] = max(pt[k] * 0.985, v)
+            pt[k] = max(pt[k] * 0.998, v)
         for k, v in [('kick', kick_raw), ('snare', snare_raw), ('hihat', hihat_raw)]:
-            pt[k] = max(pt[k] * 0.980, v)
+            pt[k] = max(pt[k] * 0.990, v)
         
         def norm(v, p):
-            # Gamma 0.75 -> 0.65: Boosts lower values more (better low-volume response)
-            return np.clip(np.power(v / (p + 1e-6), 0.65), 0.0, 1.0)
+            # Gamma 1.0 (linear) - No boost, more dynamic range
+            return np.clip(v / (p + 1e-6), 0.0, 1.0)
 
         # Normalize Visual Bands
         bass_n = norm(bass_raw, pt['bass'])

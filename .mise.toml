@@ -12,9 +12,13 @@ run = "python -m ensurepip && python -m pip install -U pip && pip install -r req
 description = "List available audio devices and find BlackHole"
 run = "python -m moonlander_musicviz.list_devices"
 
-[tasks.run]
-description = "Start the music visualizer (capture audio → send to Moonlander)"
+[tasks.live]
+description = "Start the music visualizer (Live Mode)"
 run = "python -m moonlander_musicviz.main"
+
+[tasks.sim]
+description = "Start the Digital Twin Simulator"
+run = "python -m moonlander_musicviz.main --simulator"
 
 [tasks.clean]
 description = "Remove venv and cache"

@@ -30,6 +30,7 @@ def main():
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--screen", action="store_true", help="Sync colors with screen content")
+    parser.add_argument("--simulator", action="store_true", help="Visualize LED effects in terminal (Digital Twin)")
     args = parser.parse_args()
 
     print("[*] Moonlander Music Visualizer (macOS)")
@@ -66,8 +67,24 @@ def main():
     if args.screen:
         from .screen_analyzer import ScreenAnalyzer
         screen_analyzer = ScreenAnalyzer()
+        
+    simulator = None
+    log_file = None
+    if args.simulator:
+        from .simulator import MoonlanderSimulator
+        import json
+        simulator = MoonlanderSimulator()
+        print("[*] Digital Twin Simulator: ENABLED")
+        
+        # Create debug log file (JSONL format for LLM debugging)
+        import datetime
+        import os
+        os.makedirs('.log', exist_ok=True)
+        log_filename = f".log/sim_debug_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
+        log_file = open(log_filename, 'w')
+        print(f"[*] Debug log (JSONL): {log_filename}")
     
-    dashboard = TerminalDashboard()
+    dashboard = TerminalDashboard(simulator_enabled=args.simulator)
     track_info = TrackInfo()
     current_track_name = "Waiting..."
     last_track_check = 0.0
@@ -89,7 +106,9 @@ def main():
     mod_treble_boost = 0.0
     
     def signal_handler(sig, frame):
-        # We don't print here to avoid breaking the dashboard layout
+        # Close log file if open
+        if log_file:
+            log_file.close()
         sender.close()
         exit(0)
     
@@ -127,9 +146,9 @@ def main():
                     
                     # 2. Snare -> Saturation (Mild desaturation, not full bleach)
                     if features.get('snare', 0) > 0.5:
-                        mod_saturation = 0.7 
+                        mod_saturation = 0.9 
                     else:
-                        mod_saturation = min(1.0, mod_saturation + 2.5 * dt) # Fast recovery
+                        mod_saturation = min(1.0, mod_saturation + 3.0 * dt) # Fast recovery
                     
                     # 3. Hi-Hat -> Treble Boost (Tiny sparkle)
                     if features.get('hihat', 0) > 0.5:
@@ -143,8 +162,7 @@ def main():
                     features['bass']   = np.clip(features['bass'] * mod_master_gain, 0, 1.0)
                     features['treble'] = np.clip(features['treble'] + mod_treble_boost, 0, 1.0)
                     
-                    # --- Chorus Boost & Saturation Preservation (The Master's Touch) ---
-                    is_chorus = features.get('is_chorus', False)
+
                     
                     if args.screen:
                         h_b, h_m, h_t, screen_sat = screen_analyzer.get_palette()
@@ -176,10 +194,8 @@ def main():
                         p_rot = active_palette["rotation_allowed"]
                         
                         # --- Dynamic Hue Rotation ---
-                        rot_speed_mult = 1.5 if is_chorus else 1.0
-                        
                         if p_rot:
-                            speed = (0.5 + (features['loudness_rms'] * 2.0)) * rot_speed_mult
+                            speed = 0.5 + (features['loudness_rms'] * 2.0)
                             if features['kick'] > 0.5:
                                 hue_rotation += 3.0
                             hue_rotation = (hue_rotation + speed) % 255.0
@@ -191,13 +207,8 @@ def main():
                         h_m = int((base_hues[1] + hue_rotation * 0.5) % 255)
                         h_t = int((base_hues[2] + hue_rotation * 1.0) % 255)
                         
-                        # Combine Palette Base Saturation with Rhythm Modulation
-                        # Vivid Overdrive: No more 220 limit. Pure color at all times.
-                        if is_chorus:
-                            mod_master_gain = 1.2 # Overdrive brightness
-                            final_saturation = 255 
-                        else:
-                            final_saturation = int(p_sat * mod_saturation)
+                        # Use palette saturation with rhythm modulation
+                        final_saturation = int(p_sat * mod_saturation)
 
                     # Send Packet via HID
                     # We also send the modulated master_gain via features['master_gain'] if needed, 
@@ -208,8 +219,60 @@ def main():
                     
                     sender.send_packet(features, hue_bass=h_b, hue_mid=h_m, hue_treble=h_t, saturation=final_saturation)
                     
+                    sim_leds = None
+                    sim_debug_state = None
+                    if args.simulator:
+                        # Prepare packet data for simulator (Digital Twin)
+                        sim_packet = {
+                            'bass': int(features['bass'] * 255),
+                            'mid': int(features['mid'] * 255),
+                            'treble': int(features['treble'] * 255),
+                            'beat': int(features['beat'] * 255),
+                            'perimeter_sparkle': int(features['treble'] * 200), # Approximation of firmware logic
+                            'loudness_rms': int(features['loudness_rms'] * 255),
+                            'hue_bass': h_b,
+                            'hue_mid': h_m,
+                            'hue_treble': h_t,
+                            'saturation': final_saturation,
+                            'master_gain': int(10 + (features['loudness_rms']**2.0 * 245)) # Approx firmware logic
+                        }
+                        sim_leds = simulator.update(sim_packet)
+                        sim_debug_state = simulator.get_debug_state()
+                        
+                        # Write to debug log file (JSONL format)
+                        if log_file:
+                            import json
+                            log_entry = {
+                                "t": round(now, 3),
+                                "frame": frame_count,
+                                "track": current_track_name,
+                                "palette": current_p_name,
+                                "audio": {
+                                    "bass": sim_packet['bass'],
+                                    "mid": sim_packet['mid'],
+                                    "treble": sim_packet['treble'],
+                                    "rms": sim_packet['loudness_rms'],
+                                    "beat": sim_packet['beat'],
+                                    "snare": sim_packet['perimeter_sparkle'],
+                                },
+                                "color": {
+                                    "hue_bass": h_b,
+                                    "hue_mid": h_m,
+                                    "hue_treble": h_t,
+                                    "saturation": final_saturation,
+                                    "master_gain": sim_packet['master_gain'],
+                                },
+                                "metrics": {
+                                    "bass_rms_ratio": round(sim_packet['bass'] / max(sim_packet['loudness_rms'], 1), 2),
+                                    "dynamic_range": max(sim_packet['bass'], sim_packet['mid'], sim_packet['treble']) - 
+                                                    min(sim_packet['bass'], sim_packet['mid'], sim_packet['treble']),
+                                },
+                            }
+                            log_file.write(json.dumps(log_entry) + "\n")
+                            log_file.flush()
+
                     # Update Dashboard
-                    live.update(dashboard.update(features, current_p_name, device_name, current_track_name, hues=(h_b, h_m, h_t), saturation=final_saturation))
+                    live.update(dashboard.update(features, current_p_name, device_name, current_track_name, hues=(h_b, h_m, h_t), saturation=final_saturation, leds=sim_leds, debug_state=sim_debug_state))
                     
                     last_update = now
                     frame_count += 1

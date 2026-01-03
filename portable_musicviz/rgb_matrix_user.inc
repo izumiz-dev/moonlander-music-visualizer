@@ -20,23 +20,29 @@ static RGB hsv_to_rgb_u8(uint8_t h, uint8_t s, uint8_t v) {
 
 // === LED Geometry (computed once at startup) ===
 static struct {
-  float max_left_x;
-  float min_right_x;
+  float max_left_x;   // Inner edge of left half
+  float min_right_x;  // Inner edge of right half
+  float min_left_x;   // Outer edge of left half (New)
+  float max_right_x;  // Outer edge of right half (New)
   float max_r;
   bool  initialized;
-} geometry = { 0, 255, 0.0, false };
+} geometry = { 0, 255, 255, 0, 0.0, false };
 
 static void compute_geometry(void) {
   geometry.max_left_x = 0;
   geometry.min_right_x = 255;
+  geometry.min_left_x = 255; // Reset to max for finding min
+  geometry.max_right_x = 0;   // Reset to min for finding max
   
-  // Find inner edges
+  // Find edges
   for (uint8_t i = 0; i < RGB_MATRIX_LED_COUNT; i++) {
       float x = (float)g_led_config.point[i].x;
       if (i < 36) { // Left half
           if (x > geometry.max_left_x) geometry.max_left_x = x;
+          if (x < geometry.min_left_x) geometry.min_left_x = x;
       } else { // Right half
           if (x < geometry.min_right_x) geometry.min_right_x = x;
+          if (x > geometry.max_right_x) geometry.max_right_x = x;
       }
   }
   
@@ -153,16 +159,24 @@ bool musicviz(effect_params_t *params) {
       b_out += (int)(rgb_t.b * k);
     }
 
-    // --- Layer 2: Inward Edge Glow ---
-    float dist_from_edge = geometry.max_r - r;
-    float glow_range = geometry.max_r * 0.4f; 
-    
-    if (dist_from_edge < glow_range) {
-      float intensity = (1.0f - (dist_from_edge / glow_range)) * ((float)mv.treble / 255.0f);
-      intensity *= 0.8f;
-      r_out += (int)(rgb_t.r * intensity);
-      g_out += (int)(rgb_t.g * intensity);
-      b_out += (int)(rgb_t.b * intensity);
+    // --- Layer 2: Inward Edge Glow (Round Dynamic Wave) ---
+    // Calculate distance from the OUTER edge (creating a ripple effect)
+    float dx_outer = (i < 36) ? (lx - geometry.min_left_x) : (geometry.max_right_x - lx);
+    float dy_outer = ly - 32.0f; // Center Y is 32
+    float r_outer  = sqrtf(dx_outer*dx_outer + dy_outer*dy_outer);
+
+    // Calculate wave radius based on smoothed treble volume (Gamma 2.0 applied via t_n*t_n)
+    // Reach is 50% of the total width.
+    float outer_wave_radius = (t_n * t_n) * (geometry.max_r * 0.5f);
+
+    if (r_outer <= outer_wave_radius) {
+      // Fade out towards the edge of the wave
+      float k = (outer_wave_radius - r_outer) / (outer_wave_radius + 1e-3);
+      
+      // Add color (Treble) scaled by k
+      r_out += (int)(rgb_t.r * k);
+      g_out += (int)(rgb_t.g * k);
+      b_out += (int)(rgb_t.b * k);
     }
     
     // Apply master gain and clamp

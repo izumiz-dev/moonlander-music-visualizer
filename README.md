@@ -2,6 +2,10 @@
 
 This project transforms your **ZSA Moonlander** keyboard into a high-performance, low-latency music and screen visualizer. It analyzes computer audio (Bass, Mid, Treble) and screen content in real-time to drive stunning custom RGB effects.
 
+## Demo
+
+[![Moonlander Music Visualizer Demo](https://img.youtube.com/vi/_oECPrUgOGk/0.jpg)](https://www.youtube.com/watch?v=_oECPrUgOGk)
+
 ## Features
 
 -   **Screen Color Sync (New!):** Captures your main display's dominant colors in real-time and syncs the keyboard backlight to match the mood of movies or MVs.

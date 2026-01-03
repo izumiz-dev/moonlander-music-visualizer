@@ -1,5 +1,7 @@
 # Moonlander Music Visualizer
 
+[日本語 (Japanese)](README.ja.md)
+
 This project transforms your **ZSA Moonlander** keyboard into a high-performance, low-latency music and screen visualizer. It analyzes computer audio (Bass, Mid, Treble) and screen content in real-time to drive stunning custom RGB effects.
 
 ## Demo

@@ -20,9 +20,9 @@ class AudioAnalyzer:
         self.window = np.hanning(nfft).astype(np.float32)
         
         # Envelope followers (attack/release)
-        # Tuned for "Jab-like" feel: faster attack, sharper release
-        self.env_bass = Envelope(attack=0.85, release=0.25)
-        self.env_mid = Envelope(attack=0.60, release=0.15)
+        # Tuned for "Guan-Guan" Resonance: Ultra-fast attack, snappy release
+        self.env_bass = Envelope(attack=0.90, release=0.25)
+        self.env_mid = Envelope(attack=0.95, release=0.10)
         self.env_treble = Envelope(attack=0.35, release=0.06)
         self.env_loudness = Envelope(attack=0.50, release=0.10)
         
@@ -46,6 +46,16 @@ class AudioAnalyzer:
         
         # Circular buffer for FFT
         self.buf = np.zeros((nfft, 2), dtype=np.float32)
+        
+        # Chorus Detection State
+        self.energy_history = []
+        self.history_len = int(3.0 * (sr / hop)) # 3 seconds history
+        self.chorus_threshold = 0.55 # Threshold for chorus detection
+        
+        # Beat Envelope State
+        self.beat_envelope = 0.0
+        self.snare_envelope = 0.0
+        self.hihat_envelope = 0.0
     
     def update(self, frame):
         """
@@ -72,21 +82,26 @@ class AudioAnalyzer:
         # Loudness (RMS)
         rms = float(np.sqrt(np.mean(windowed * windowed)) + 1e-12)
         
+        # Update Energy History (Chorus Detection)
+        self.energy_history.append(rms)
+        if len(self.energy_history) > self.history_len:
+            self.energy_history.pop(0)
+        
         # === Visual Bands (Smoothed) ===
         # Expert Optimized Crossover:
-        # Bass: 40-150Hz -> Kick & Bass guitar core
-        # Mid: 150-2500Hz -> Vocal body, snare body, guitar mids
-        # Treble: 2500-20000Hz -> Snare snap, hi-hats, vocal air, lead synths/guitars
-        bass_raw = self._band_energy(mag, freqs, 40, 150)
-        mid_raw = self._band_energy(mag, freqs, 150, 2500)
-        treble_raw = self._band_energy(mag, freqs, 2500, 20000)
+        # Bass: 20-250Hz -> Extended to catch Low-Mid groove & Bass guitar harmonics.
+        # Mid: 250-4000Hz -> Focused on Vocal core and Lead synths.
+        # Treble: 4000-20000Hz -> Focused on Snap, air, and high-frequency percussion.
+        bass_raw = self._band_energy(mag, freqs, 20, 250)
+        mid_raw = self._band_energy(mag, freqs, 250, 4000)
+        treble_raw = self._band_energy(mag, freqs, 4000, 20000)
         
         # === Rhythm Bands (Transient Only) ===
         # Expert Tuning:
-        # Kick: 60-150Hz -> Cut sub-bass rumble, focus on attack.
-        # Snare: 1.5-4kHz -> Cut vocal/body resonance, focus on "snap" noise.
-        # HiHat: 8-16kHz -> Standard high frequency range.
-        kick_raw  = self._transient_energy(mag, freqs, 60, 150)
+        # Kick: 40-140Hz -> Deep thud.
+        # Snare: 1.5-4kHz -> Snap noise.
+        # HiHat: 8-16kHz -> High sizzle.
+        kick_raw  = self._transient_energy(mag, freqs, 40, 140)
         snare_raw = self._transient_energy(mag, freqs, 1500, 4000)
         hihat_raw = self._transient_energy(mag, freqs, 8000, 16000)
 
@@ -94,15 +109,16 @@ class AudioAnalyzer:
         pt = self.peak_tracks
         
         # Expert Review Tuning:
-        # Visual bands need slow decay (0.995) for smooth gain control.
-        # Rhythm bands need faster decay (0.990) to follow dynamic changes and breaks.
+        # Visual bands need faster recovery (0.985) to adapt to drops and transitions.
+        # Rhythm bands need snappy recovery (0.980) to ensure impact isn't lost.
         for k, v in [('bass', bass_raw), ('mid', mid_raw), ('treble', treble_raw), ('rms', rms)]:
-            pt[k] = max(pt[k] * 0.995, v)
+            pt[k] = max(pt[k] * 0.985, v)
         for k, v in [('kick', kick_raw), ('snare', snare_raw), ('hihat', hihat_raw)]:
-            pt[k] = max(pt[k] * 0.990, v)
+            pt[k] = max(pt[k] * 0.980, v)
         
         def norm(v, p):
-            return np.clip(np.power(v / (p + 1e-6), 0.75), 0.0, 1.0)
+            # Gamma 0.75 -> 0.65: Boosts lower values more (better low-volume response)
+            return np.clip(np.power(v / (p + 1e-6), 0.65), 0.0, 1.0)
 
         # Normalize Visual Bands
         bass_n = norm(bass_raw, pt['bass'])
@@ -123,14 +139,36 @@ class AudioAnalyzer:
         self.env_loudness.release = 0.2
         loudness_e = self.env_loudness.update(rms_n)
         
-        # === Rhythm Detection ===
-        is_kick  = self._detect_onset('kick', kick_n, threshold=0.10, refractory=4)
+        # === Rhythm Detection (Sharpened) ===
+        # Thresholds lowered for better sensitivity (0.15 -> 0.08 for kick)
+        is_kick  = self._detect_onset('kick', kick_n, threshold=0.08, refractory=3)
         is_snare = self._detect_onset('snare', snare_n, threshold=0.12, refractory=3)
-        is_hihat = self._detect_onset('hihat', hihat_n, threshold=0.10, refractory=2)
+        is_hihat = self._detect_onset('hihat', hihat_n, threshold=0.12, refractory=2)
 
-        # Legacy Beat support (aliased to Kick)
-        beat = is_kick
+        # Beat Envelopes Logic (Faster Decay for Strobe Effect)
+        if is_kick: self.beat_envelope = 1.0
+        else: self.beat_envelope *= 0.70 
         
+        if is_snare: self.snare_envelope = 1.0
+        else: self.snare_envelope *= 0.70
+
+        if is_hihat: self.hihat_envelope = 1.0
+        else: self.hihat_envelope *= 0.70
+        
+        # Mix Snare and HiHat for the secondary rhythm channel
+        snare_hat_mix = max(self.snare_envelope, self.hihat_envelope)
+
+        # Chorus Detection Logic
+        # Normalize history against peak tracker
+        energy_density = 0.0
+        if self.energy_history:
+             raw_density = sum(self.energy_history) / len(self.energy_history)
+             # Reuse RMS peak tracker for normalization
+             pt['density'] = max(pt.get('density', 0.01) * 0.999, raw_density)
+             energy_density = np.clip(raw_density / (pt['density'] + 1e-6), 0.0, 1.0)
+        
+        is_chorus = energy_density > self.chorus_threshold
+
         # Clamp to 0–1
         features = {
             'loudness_rms': np.clip(loudness_e, 0.0, 1.0),
@@ -138,10 +176,13 @@ class AudioAnalyzer:
             'bass': np.clip(bass_e, 0.0, 1.0),
             'mid': np.clip(mid_e, 0.0, 1.0),
             'treble': np.clip(treble_e, 0.0, 1.0),
-            'beat': beat,
-            'kick': beat,
+            'beat': np.clip(self.beat_envelope, 0.0, 1.0),   # Kick Envelope -> Byte 9
+            'perimeter_sparkle': np.clip(snare_hat_mix, 0.0, 1.0), # Snare/Hat Envelope -> Byte 16 (Repurposed)
+            'kick': is_kick, 
             'snare': is_snare,
-            'hihat': is_hihat
+            'hihat': is_hihat,
+            'is_chorus': is_chorus,
+            'energy_density': energy_density
         }
         
         # Legacy support

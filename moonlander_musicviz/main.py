@@ -143,7 +143,8 @@ def main():
                     features['bass']   = np.clip(features['bass'] * mod_master_gain, 0, 1.0)
                     features['treble'] = np.clip(features['treble'] + mod_treble_boost, 0, 1.0)
                     
-                    final_saturation = int(255 * mod_saturation)
+                    # --- Chorus Boost & Saturation Preservation (The Master's Touch) ---
+                    is_chorus = features.get('is_chorus', False)
                     
                     if args.screen:
                         h_b, h_m, h_t, screen_sat = screen_analyzer.get_palette()
@@ -175,8 +176,10 @@ def main():
                         p_rot = active_palette["rotation_allowed"]
                         
                         # --- Dynamic Hue Rotation ---
+                        rot_speed_mult = 1.5 if is_chorus else 1.0
+                        
                         if p_rot:
-                            speed = 0.5 + (features['loudness_rms'] * 2.0)
+                            speed = (0.5 + (features['loudness_rms'] * 2.0)) * rot_speed_mult
                             if features['kick'] > 0.5:
                                 hue_rotation += 3.0
                             hue_rotation = (hue_rotation + speed) % 255.0
@@ -189,11 +192,20 @@ def main():
                         h_t = int((base_hues[2] + hue_rotation * 1.0) % 255)
                         
                         # Combine Palette Base Saturation with Rhythm Modulation
-                        final_saturation = int(p_sat * mod_saturation)
+                        # Vivid Overdrive: No more 220 limit. Pure color at all times.
+                        if is_chorus:
+                            mod_master_gain = 1.2 # Overdrive brightness
+                            final_saturation = 255 
+                        else:
+                            final_saturation = int(p_sat * mod_saturation)
 
                     # Send Packet via HID
                     # We also send the modulated master_gain via features['master_gain'] if needed, 
                     # but modulating band values directly is often more predictable.
+                    
+                    # Update master gain in features for the packet
+                    features['master_gain'] = np.clip(mod_master_gain, 0.0, 1.0) # Actually handled by bands, but kept for logic
+                    
                     sender.send_packet(features, hue_bass=h_b, hue_mid=h_m, hue_treble=h_t, saturation=final_saturation)
                     
                     # Update Dashboard

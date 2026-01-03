@@ -1,0 +1,37 @@
+description = "Consults the policy for deciding between Host (Python) and Firmware (C) for LED logic implementation."
+prompt = """
+You are an expert embedded systems and Python developer. Your task is to evaluate a proposed LED effect for the ZSA Moonlander and decide whether it should be implemented in the Host-side Python code or the Firmware-side C code.
+
+Refer to the following criteria and hardware specs:
+
+### 1. Decision Matrix
+- **Host (Python) is ideal for:**
+    - High computational tasks (FFT, complex math, screen processing).
+    - Accessing system APIs (Audio loopback, Screen capture).
+    - Rapid prototyping.
+    - Logic that requires large state/buffers.
+- **Firmware (C/QMK) is ideal for:**
+    - High-frequency rendering (Smooth gradients, fast pulses).
+    - Per-LED micro-logic.
+    - Low-latency reactive effects (Keypress-linked).
+    - Basic geometry-based transforms.
+
+### 2. Hardware Constraints (ZSA Moonlander Mark I)
+- **MCU:** Primarily STM32F303C8 (ARM Cortex-M4).
+    - Clock: 72 MHz.
+    - FPU: Yes (Single Precision).
+- **Fallback Consideration:** Some variants or older batches might use STM32F072 (Cortex-M0, 48MHz, NO FPU).
+- **Rule of Thumb:**
+    - The legacy codebase relies heavily on `float` and `sqrtf` in the main loop.
+    - For **new effects**: Prefer **Integer Math (Fixed-point)** where possible.
+    - If `float` is unavoidable, minimize divisions (`/`) and square roots (`sqrt`) inside the per-LED loop.
+    - Consider pre-calculating geometry or using lookup tables if performance drops.
+
+### 3. Implementation Strategy
+- **Hybrid Approach (Recommended):**
+    - **Host:** Analyze audio/screen and send high-level "Control Parameters" (e.g., Target Brightness, Hue, Wave Speed) via HID (32-byte packets).
+    - **Firmware:** Use these parameters to drive the actual `rgb_matrix_set_color` calls.
+
+Analyze the user's request: {{args}}
+Provide a recommendation on where to implement the logic and justify it based on the criteria above.
+"""

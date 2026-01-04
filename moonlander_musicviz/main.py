@@ -9,20 +9,26 @@ from .audio_analyzer import AudioAnalyzer
 from .hid_sender import HIDSender
 from .track_info import TrackInfo
 
-def find_blackhole_device():
-    """Find BlackHole input device index."""
+def find_audio_device():
+    """Find a suitable loopback input device (BlackHole, VB-Cable, Stereo Mix)."""
     devices = sd.query_devices()
-    for i, d in enumerate(devices):
-        if "BlackHole" in d["name"] and d["max_input_channels"] > 0:
-            return i
+    
+    # Priority list for loopback/system audio capture
+    targets = ["BlackHole", "CABLE Output", "Stereo Mix", "ステレオ ミキサー"]
+    
+    for target in targets:
+        for i, d in enumerate(devices):
+            if target.lower() in d["name"].lower() and d["max_input_channels"] > 0:
+                return i
+    
+    # Fallback: list all input devices and raise error
+    input_devices = [f"[{i}] {d['name']}" for i, d in enumerate(devices) if d["max_input_channels"] > 0]
+    dev_list = "\n".join(input_devices)
     
     raise RuntimeError(
-        "BlackHole device not found.\n"
-        "Please:\n"
-        "  1. Install BlackHole: brew install blackhole-2ch\n"
-        "  2. Restart your Mac\n"
-        "  3. Configure a Multi-Output device in Audio MIDI Setup\n"
-        "  4. Set it as system output\n"
+        "No system audio capture device found (BlackHole, VB-Cable, or Stereo Mix).\n"
+        f"Available input devices:\n{dev_list}\n\n"
+        "Please ensure your virtual audio device is installed and set as the default recording device."
     )
 
 def main():
@@ -33,13 +39,13 @@ def main():
     parser.add_argument("--simulator", action="store_true", help="Visualize LED effects in terminal (Digital Twin)")
     args = parser.parse_args()
 
-    print("[*] Moonlander Music Visualizer (macOS)")
+    print("[*] Moonlander Music Visualizer")
     if args.screen:
         print("[*] Mode: Screen Color Sync")
-    print("[*] Finding BlackHole device...")
+    print("[*] Finding audio loopback device...")
     
     try:
-        device_id = find_blackhole_device()
+        device_id = find_audio_device()
         device_name = sd.query_devices()[device_id]['name']
         print(f"[+] Using device: {device_name}")
     except RuntimeError as e:
@@ -236,6 +242,8 @@ def main():
                             'saturation': final_saturation,
                             'master_gain': int(10 + (features['loudness_rms']**2.0 * 245)) # Approx firmware logic
                         }
+                        # Ensure simulator state is updated for debug view
+                        simulator.log_packet(sim_packet)
                         sim_leds = simulator.update(sim_packet)
                         sim_debug_state = simulator.get_debug_state()
                         
@@ -253,7 +261,7 @@ def main():
                                     "treble": sim_packet['treble'],
                                     "rms": sim_packet['loudness_rms'],
                                     "beat": sim_packet['beat'],
-                                    "snare": sim_packet['perimeter_sparkle'],
+                                    "sparkle": sim_packet['perimeter_sparkle'],
                                 },
                                 "color": {
                                     "hue_bass": h_b,
@@ -261,11 +269,12 @@ def main():
                                     "hue_treble": h_t,
                                     "saturation": final_saturation,
                                     "master_gain": sim_packet['master_gain'],
+                                    "mod_master": round(mod_master_gain, 2),
+                                    "mod_sat": round(mod_saturation, 2),
                                 },
                                 "metrics": {
                                     "bass_rms_ratio": round(sim_packet['bass'] / max(sim_packet['loudness_rms'], 1), 2),
-                                    "dynamic_range": max(sim_packet['bass'], sim_packet['mid'], sim_packet['treble']) - 
-                                                    min(sim_packet['bass'], sim_packet['mid'], sim_packet['treble']),
+                                    "avg_led_brightness": int(sum(sum(c) for c in sim_leds) / (72 * 3)),
                                 },
                             }
                             log_file.write(json.dumps(log_entry) + "\n")

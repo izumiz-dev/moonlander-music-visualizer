@@ -101,7 +101,14 @@ class HIDSender:
             for i in range(18, 32):
                 pkt[i] = 0
             
-            self.dev.write(list(pkt))
+            # Windows HID compatibility: 
+            # On Windows, the first byte must be the Report ID (0x00 for none).
+            # This makes the packet 33 bytes.
+            import os
+            if os.name == 'nt':
+                self.dev.write([0x00] + list(pkt))
+            else:
+                self.dev.write(list(pkt))
             return True
         
         except Exception as e:

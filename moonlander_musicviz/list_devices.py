@@ -12,8 +12,13 @@ def main():
             channels = d['max_input_channels']
             sr = d['default_samplerate']
             
-            marker = " <-- BLACKHOLE" if "BlackHole" in name else ""
-            marker = " <-- DEFAULT" if i == sd.default.device[0] else marker
+            marker = ""
+            if "BlackHole" in name: marker = " <-- BLACKHOLE"
+            elif "CABLE Output" in name: marker = " <-- VB-CABLE"
+            elif "Stereo Mix" in name or "ステレオ ミキサー" in name: marker = " <-- STEREO MIX"
+            
+            if i == sd.default.device[0]:
+                marker += " [DEFAULT]"
             
             print(f"[{i:2d}] {name:40s} | ch={channels} | sr={sr}")
             if marker:

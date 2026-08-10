@@ -1,0 +1,6 @@
+# Shell scripts and Make fragments are consumed by bash/make under QMK MSYS and
+# WSL, both of which choke on CR characters (bash reports `$'\r': command not
+# found`, make silently folds the CR into variable values). Windows checkouts
+# default to core.autocrlf=true, so pin these to LF regardless of platform.
+*.sh    text eol=lf
+*.mk    text eol=lf

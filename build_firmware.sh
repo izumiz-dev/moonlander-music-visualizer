@@ -60,10 +60,24 @@ cp "$LIB_DIR/rgb_matrix_user.inc" "$DEST_DIR/"
 
 # Patch keymap.c to handle ORYX_ENABLE=no (suppress rawhid_state usage)
 # We replace 'rawhid_state.rgb_control' with '0' so the checks always fail (Oryx not controlling).
-# Note: macOS sed requires empty string for backup extension.
+# Note: in-place sed differs between BSD (macOS) and GNU (Linux/MSYS), so write via a temp file instead.
 if [ -f "$DEST_DIR/keymap.c" ]; then
     echo "[*] Patching keymap.c to remove Oryx dependencies..."
-    sed -i '' 's/rawhid_state.rgb_control/0/g' "$DEST_DIR/keymap.c"
+    sed 's/rawhid_state\.rgb_control/0/g' "$DEST_DIR/keymap.c" > "$DEST_DIR/keymap.c.tmp"
+    mv "$DEST_DIR/keymap.c.tmp" "$DEST_DIR/keymap.c"
+fi
+
+# 3b. Inject keycode compatibility shims (if not already present)
+# Oryx targets ZSA's QMK fork, which keeps the legacy RGB_* keycode names.
+# Upstream QMK renamed them to RM_*, so map them back before compiling.
+CONFIG_H="$DEST_DIR/config.h"
+touch "$CONFIG_H"
+if ! grep -q "RGB_MODE_FORWARD" "$CONFIG_H"; then
+    echo "[*] Injecting keycode compatibility defines into config.h..."
+    echo "" >> "$CONFIG_H"
+    cat "$LIB_DIR/config.inc.h" >> "$CONFIG_H"
+else
+    echo "[*] config.h already seems patched, skipping injection."
 fi
 
 # 4. Inject Rules (if not already present)

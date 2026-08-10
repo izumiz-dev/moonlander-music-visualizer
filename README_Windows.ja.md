@@ -6,7 +6,7 @@ WSL (Linux) を経由せず、Windows ネイティブで動作させることを
 ## 前提条件
 
 1.  **Moonlander キーボード**
-    *   **書き込み済みであること:** すでに Music Visualizer 対応のファームウェアが書き込まれている必要があります。（注: Windows 上でのファームウェアビルドはこのスクリプトでは現在サポートされていません）
+    *   Music Visualizer 対応のファームウェアが必要です。未書き込みの場合は [4. ファームウェアのビルド](#4-ファームウェアのビルド) を参照してください。QMK MSYS を使って Windows ネイティブでビルドできます。
 2.  **Windows 10 / 11**
 3.  **Python 3.11 以降**
     *   Microsoft Store または公式サイトからインストールしてください。
@@ -28,9 +28,10 @@ Windows の音を Visualizer に送るための設定です。
     *   タスクバーのスピーカーアイコンをクリックし、再生デバイスを **「CABLE Input (VB-Audio Virtual Cable)」** に切り替えます。
     *   ※これでPCの音が仮想ケーブルに流れます。
 
-3.  **録音デバイスの設定**
+3.  **録音デバイスの設定** *(任意)*
     *   「サウンドの設定」 > 「録音」タブを開きます。
     *   **「CABLE Output (VB-Audio Virtual Cable)」** を右クリックし、**「既定のデバイス」** に設定します。
+    *   *必須ではありません:* `main.py` の `find_audio_device()` はデバイスを**名前で検索**するため、既定の録音デバイスが別のものでも CABLE Output を自動的に拾います。実際に効くのは上の手順2の方です。
 
 > **補足: スピーカーから音を聞く方法**
 > 再生デバイスを CABLE Input にすると、スピーカーから音が聞こえなくなります。
@@ -76,6 +77,71 @@ mise run live
 # 手動の場合
 python -m moonlander_musicviz.main
 ```
+
+---
+
+## 4. ファームウェアのビルド
+
+キーボードにまだ Music Visualizer が入っていない場合や、Oryx でレイアウトを変更した場合に必要です。
+ビルドは **QMK MSYS** 上で行います。QMK MSYS は bash を同梱しているため、macOS で使うのと同じ
+`build_firmware.sh` がそのまま動きます。
+
+### 4.1 QMK MSYS のインストール
+
+[msys.qmk.fm](https://msys.qmk.fm/) からインストーラを入手して実行し、**QMK MSYS** ターミナルを開いて:
+
+```bash
+qmk setup
+```
+
+`qmk_firmware`（サブモジュール込みで約 2GB）が `C:\Users\<ユーザー名>\qmk_firmware` にクローンされます。
+これは `build_firmware.sh` が期待するパスと一致しています。最後に `qmk doctor` を実行し、
+`arm-none-eabi-gcc` のバージョンが表示されることを確認してください。
+
+> **`qmk doctor` で `Failed to compile a simple program with arm-none-eabi-gcc, return code 127` と出る場合:**
+> ツールチェーンは `/opt/qmk` にありますが、動作に必要な `libwinpthread-1.dll`（`/mingw64/bin` にある）が
+> PATH に入っていないのが原因です。以下の内容で
+> `C:\QMK_MSYS\etc\profile.d\zzz-qmk-mingw-dll-path.sh` を作成すると恒久的に解決します:
+> ```sh
+> export PATH="$PATH:/mingw64/bin"
+> ```
+> 先頭ではなく**末尾**に追加してください。mingw 側のツールが QMK のものを覆い隠さないようにするためです。
+
+> **`qmk` コマンド自体が見つからない場合**、インストーラの CLI 導入工程が失敗しています。手動で入れてください:
+> ```bash
+> UV_TOOL_DIR=/opt/uv/tools UV_TOOL_BIN_DIR=/opt/uv/tools/bin /opt/uv/uv.exe tool install qmk
+> ```
+
+### 4.2 Oryx ソースの取得
+
+[Oryx](https://configure.zsa.io/moonlander) で自分のレイアウトを開き、コンパイル済みの `.bin` ではなく
+**Source**（zip）をダウンロードします。**`.bin` はベースにできません** — ビジュアライザはソースレベルで
+マージされるためです。
+
+解凍して、`rules.mk` を含む内側のフォルダを `firmware/oryx_source/` に配置します:
+
+```
+firmware/oryx_source/zsa_moonlander_<レイアウト名>_source/
+```
+
+### 4.3 ビルドと書き込み
+
+PowerShell ではなく **QMK MSYS** のターミナルから実行します:
+
+```bash
+cd /c/Users/<ユーザー名>/Repositories/moonlander-music-visualizer
+./build_firmware.sh
+```
+
+`C:\Users\<ユーザー名>\qmk_firmware\zsa_moonlander_my_musicviz_automerge.bin` が生成されます。
+[Keymapp](https://blog.zsa.io/keymapp/) を開き、**Select Firmware** からこのファイルを指定してください。
+
+書き込み後は、RGB モードを `musicviz` まで送ってください。カスタムエフェクトはリストの**末尾**に
+追加されるため、Moonlander の約45種類の内蔵アニメーションを通過する必要があります（モードキーの
+長押しが楽です）。選択内容は EEPROM に保存されるので、この操作は最初の一度だけです。
+
+> **改行コードに注意。** `.gitattributes` で `*.sh` と `*.mk` を LF に固定しています。これを迂回すると
+> Windows の CRLF により bash が `$'\r': command not found` で停止し、make 変数にも CR が紛れ込みます。
 
 ---
 

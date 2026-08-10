@@ -90,15 +90,29 @@ effects — do not compute distance from a single global center.
 `build_firmware.sh` does more than copy files:
 
 - Finds the real source root by locating `rules.mk` inside `firmware/oryx_source/*` (Oryx zips nest).
-- Deletes `keymap.json` so `keymap.c` is compiled.
+- Deletes `keymap.json`. Newer Oryx exports use it to declare `"modules": ["zsa/oryx",
+  "zsa/defaults"]`, but upstream QMK has no `modules/zsa`, so it must go.
 - Patches `rawhid_state.rgb_control` → `0` in `keymap.c` (Oryx's HID handler must not fight ours).
-  Uses BSD `sed -i ''`, so it is **macOS-flavored**.
+  Written via a temp file, **not** `sed -i`, because in-place sed differs between BSD and GNU.
 - Appends `portable_musicviz/rules.inc.mk`, which sets `ORYX_ENABLE=no`, `RAW_ENABLE=yes`,
-  `RGB_MATRIX_CUSTOM_USER=yes`. `ORYX_ENABLE=no` is why `musicviz_core.c` defines a dummy
-  `webhid_leds` symbol — don't remove it.
+  `RGB_MATRIX_CUSTOM_USER=yes`, `RGB_MATRIX_CUSTOM_KB=no`. `ORYX_ENABLE=no` is why
+  `musicviz_core.c` defines a dummy `webhid_leds` symbol — don't remove it. `RGB_MATRIX_CUSTOM_KB=no`
+  cancels Oryx's `yes`, which would require `rgb_matrix_kb.inc` (ZSA fork only).
+- Appends `portable_musicviz/config.inc.h` to the keymap's `config.h`, mapping the legacy `RGB_*`
+  keycode names Oryx emits onto upstream's current `RM_*` ones. `RGB_SLD` is deliberately absent —
+  Oryx declares it itself in `keymap.c`'s `custom_keycodes` enum.
 - Output: `~/qmk_firmware/zsa_moonlander_my_musicviz_automerge.bin`.
 
-Windows has no firmware build path; that platform assumes an already-flashed keyboard.
+Both injection steps are guarded by a `grep` so re-running the script is idempotent.
+
+**Windows builds work** via QMK MSYS (which ships bash), using the same script — see
+`README_Windows.md`. Two install-time gotchas are documented there: the bundled toolchains need
+`/mingw64/bin` on `PATH` for `libwinpthread-1.dll`, and the installer sometimes fails to install the
+`qmk` CLI itself.
+
+`.gitattributes` pins `*.sh` and `*.mk` to `eol=lf`. Windows checkouts default to
+`core.autocrlf=true`, and CRLF makes bash die with `$'\r': command not found` while make silently
+folds the CR into variable values. Keep new shell/make files covered by it.
 
 ## Debugging
 
@@ -106,9 +120,11 @@ Windows has no firmware build path; that platform assumes an already-flashed key
   object per frame with audio bands, hues, gains, and average LED brightness. This is the fastest way
   to reason about visual tuning without hardware; read the JSONL rather than guessing.
 - No LEDs: the keyboard must be on the `musicviz` RGB mode (cycle "Mode Next"), brightness > 0, and
-  the log must show `[HID] Opened: ...`.
-- Flat dashboard: the loopback device (BlackHole 2ch / CABLE Output / Stereo Mix) must be the default
-  recording device. `find_audio_device()` matches those names in priority order.
+  the log must show `[HID] Opened: ...`. Custom effects are appended to the end of the mode list, so
+  on a Moonlander that is ~45 presses past the built-ins.
+- Flat dashboard: audio must actually be routed into the loopback device. `find_audio_device()`
+  matches BlackHole / CABLE Output / Stereo Mix **by name**, not by system default, so the default
+  recording device is irrelevant — what matters is that playback goes to the cable's input.
 
 ## Conventions
 

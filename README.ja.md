@@ -30,7 +30,8 @@
 ├── portable_musicviz/              # [ライブラリ] ビジュアライザーのロジック (C コード)
 │   ├── musicviz.h                  # 状態定義
 │   ├── rgb_matrix_user.inc         # ビジュアライザーエフェクトの実装
-│   └── rules.inc.mk                # ビルドルール
+│   ├── rules.inc.mk                # ビルドルール (keymap の rules.mk に追記される)
+│   └── config.inc.h                # キーコード互換定義 (keymap の config.h に追記される)
 └── build_firmware.sh               # 自動ビルドスクリプト (Oryx ソース + Musicviz をマージ)
 ```
 
@@ -66,13 +67,38 @@ pip install -r requirements.txt
 
 このプロジェクトは、既存の Oryx レイアウトにビジュアライザーを「注入」するように設計されています。
 
-1.  **ソースのエクスポート:** [Oryx](https://configure.zsa.io) からレイアウトのソースコードをダウンロードします。
+`qmk setup` 済みの環境（`~/qmk_firmware` と `qmk` CLI）が必要です。Windows の場合は QMK MSYS を使います。
+[README_Windows.ja.md](README_Windows.ja.md#4-ファームウェアのビルド) を参照してください。
+
+1.  **ソースのエクスポート:** [Oryx](https://configure.zsa.io) からレイアウトの **Source**（zip）をダウンロードします。
+    コンパイル済みの `.bin` はベースにできません。ビジュアライザはソースレベルでマージされるためです。
 2.  **配置:** フォルダを `firmware/oryx_source/` に解凍します。
 3.  **ビルド:** ビルドスクリプトを実行します。自動的にソースを見つけ、ビジュアライザーのコードを注入してコンパイルします。
     ```bash
     ./build_firmware.sh
     ```
-4.  **書き込み:** [Keymapp](https://blog.zsa.io/keymapp/) または `qmk flash` を使用して、`~/qmk_firmware/` に生成された `.bin` ファイルを書き込みます。
+4.  **書き込み:** [Keymapp](https://blog.zsa.io/keymapp/) の **Select Firmware**、または `qmk flash` を使用して、`~/qmk_firmware/` に生成された `.bin` ファイルを書き込みます。
+5.  **エフェクトの選択:** RGB モードを `musicviz` まで送ります。カスタムエフェクトはリストの**末尾**に追加されるため、
+    約45種類の内蔵アニメーションを通過することになります。選択内容は EEPROM に保存されます。
+
+### Oryx のエクスポートを upstream QMK でビルドする
+
+Oryx は ZSA のフォーク向けにコードを生成するため、エクスポートしたままでは upstream QMK でコンパイルできません。
+`build_firmware.sh` が以下を自動的に調整します（手動ビルドする場合に把握しておくとよい内容です）:
+
+-   `ORYX_ENABLE = no` — ビジュアライザが Raw HID を占有するため、Oryx のハンドラと競合させられません。
+    `keymap.c` 内の `rawhid_state.rgb_control` は `0` に書き換えられ、リンカを満足させるために
+    `musicviz_core.c` がダミーの `webhid_leds` を定義します。
+-   `RGB_MATRIX_CUSTOM_KB = no` — Oryx はこれを `yes` にしますが、それにより
+    `keyboards/zsa/moonlander/rgb_matrix_kb.inc` が要求されます。このファイルは ZSA のフォークにしか存在しません。
+-   `keymap.json` を削除 — 新しいエクスポートは `"modules": ["zsa/oryx", "zsa/defaults"]` を宣言しますが、
+    upstream に `modules/zsa` は存在しません。
+-   `config.inc.h` が、Oryx の出力する旧 `RGB_*` キーコード名を現行の `RM_*` にマッピングします
+    (`RGB_TOG` → `RM_TOGG`、`RGB_MODE_FORWARD` → `RM_NEXT` など)。
+
+**トレードオフ:** `ORYX_ENABLE = no` が必須のため、Keymapp のライブ機能（ライブトレーニング、ヒートマップ）と
+Oryx のライブ RGB プレビューは使えなくなります。キー配置・レイヤー・マクロ・レイヤーごとの色設定は影響を受けず、
+Keymapp からの書き込みも従来どおり可能です。
 
 ## ⚙️ 技術的な詳細
 

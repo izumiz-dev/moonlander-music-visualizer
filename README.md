@@ -30,7 +30,8 @@ This project transforms your **ZSA Moonlander** keyboard into a high-performance
 ├── portable_musicviz/              # [Library] The Visualizer Logic (C Code)
 │   ├── musicviz.h                  # State definition
 │   ├── rgb_matrix_user.inc         # Visualizer Effect Implementation
-│   └── rules.inc.mk                # Build rules
+│   ├── rules.inc.mk                # Build rules (appended to the keymap's rules.mk)
+│   └── config.inc.h                # Keycode compat shims (appended to the keymap's config.h)
 └── build_firmware.sh               # Auto-build script (Merges Oryx source + Musicviz)
 ```
 
@@ -77,13 +78,38 @@ pip install -r requirements.txt
 
 This project is designed to "inject" the visualizer into your existing Oryx layout.
 
-1.  **Export Source:** Download your layout source code from [Oryx](https://configure.zsa.io).
+Requires a `qmk setup` environment (`~/qmk_firmware` + the `qmk` CLI). On Windows, use QMK MSYS —
+see [README_Windows.md](README_Windows.md#4-building-the-firmware).
+
+1.  **Export Source:** Download your layout's **Source** (zip) from [Oryx](https://configure.zsa.io).
+    A compiled `.bin` cannot be used as a base — the visualizer is merged in at the source level.
 2.  **Place:** Unzip the folder into `firmware/oryx_source/`.
 3.  **Build:** Run the build script. It automatically finds your source, injects the visualizer code, and compiles.
     ```bash
     ./build_firmware.sh
     ```
-4.  **Flash:** Use [Keymapp](https://blog.zsa.io/keymapp/) or `qmk flash` with the generated `.bin` file in `~/qmk_firmware/`.
+4.  **Flash:** Use [Keymapp](https://blog.zsa.io/keymapp/) (**Select Firmware**) or `qmk flash` with the generated `.bin` file in `~/qmk_firmware/`.
+5.  **Select the effect:** Cycle the RGB modes to `musicviz`. Custom effects are appended to the **end**
+    of the list, so expect to pass ~45 built-in animations. The choice persists in EEPROM.
+
+### Building an Oryx export against upstream QMK
+
+Oryx generates code for ZSA's QMK fork, so a stock export does not compile against upstream QMK as-is.
+`build_firmware.sh` reconciles this automatically — worth knowing if you ever build by hand:
+
+-   `ORYX_ENABLE = no` — the visualizer owns Raw HID, so Oryx's handler must not fight it.
+    References to `rawhid_state.rgb_control` in `keymap.c` are rewritten to `0`, and
+    `musicviz_core.c` defines a dummy `webhid_leds` to satisfy the linker.
+-   `RGB_MATRIX_CUSTOM_KB = no` — Oryx sets this to `yes`, which pulls in
+    `keyboards/zsa/moonlander/rgb_matrix_kb.inc`. That file exists only in ZSA's fork.
+-   `keymap.json` is deleted — newer exports declare `"modules": ["zsa/oryx", "zsa/defaults"]`,
+    and `modules/zsa` does not exist upstream.
+-   `config.inc.h` maps the legacy `RGB_*` keycode names Oryx emits onto the current `RM_*` ones
+    (`RGB_TOG` → `RM_TOGG`, `RGB_MODE_FORWARD` → `RM_NEXT`, and so on).
+
+**Trade-off:** because `ORYX_ENABLE = no` is required, Keymapp's live features (live training,
+heatmap) and Oryx's live RGB preview stop working. Your keys, layers, macros and per-layer colors are
+unaffected, and Keymapp can still flash the firmware.
 
 ## ⚙️ Technical Details
 

@@ -78,6 +78,34 @@ mise run live
 python -m moonlander_musicviz.main
 ```
 
+### 画面色シンク
+
+オーディオの代わりに、画面の主要な色に合わせてキーボードLEDを光らせるモードです。画面キャプチャは
+バックグラウンドスレッドで動作し（Windows の Desktop Duplication API を使う
+[dxcam](https://github.com/ra1nty/DXcam)、利用できない場合は `mss` に自動フォールバック）、
+オーディオ処理のCPU時間を奪いません。
+
+```powershell
+mise run live --screen
+# または: python -m moonlander_musicviz.main --screen
+```
+
+オプション:
+
+*   `--screen-monitor` — キャプチャするディスプレイを指定します。既定値の `primary` は、その時点で
+    Windows がメインディスプレイとして扱っているモニタに追従します。サブディスプレイを使いたい場合は
+    0始まりのインデックス（`1`、`2`、...）を指定してください。
+*   `--screen-fps` — キャプチャ頻度を上書きします（既定値はバックエンド推奨値: dxcam で約60Hz、
+    フォールバックの `mss` で約12Hz）。
+
+ダッシュボードの SCENE 欄にどのバックエンドが動作中か表示されます（例: `Screen Sync (dxcam)`）。
+`Screen Sync (mss)` や `Screen Sync (failed)` と表示される場合は dxcam が使えていない状態です
+（後述）。低速なフォールバック、あるいは未動作の状態で走っています。
+
+> **DRM保護された動画は真っ黒でキャプチャされます。** Netflix、Prime Video、Disney+ などは
+> OSレベルで画面キャプチャをブロックしており、これは Desktop Duplication・GDI のどちらにも
+> 当てはまるため回避策はありません。YouTube やローカル動画ファイルは問題なくキャプチャできます。
+
 ---
 
 ## 4. ファームウェアのビルド

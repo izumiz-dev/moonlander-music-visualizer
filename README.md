@@ -22,7 +22,9 @@ This project transforms your **ZSA Moonlander** keyboard into a high-performance
 .
 ├── moonlander_musicviz/            # [Host] Python App
 │   ├── audio_analyzer.py           # FFT Logic
-│   ├── screen_analyzer.py          # Screen Capture & Color Extraction
+│   ├── screen_analyzer.py          # Screen Capture Orchestration & Color Extraction
+│   ├── screen_backends.py          # Screen capture backends (mss, dxcam on Windows)
+│   ├── color_utils.py              # Circular hue math (averaging/smoothing on a 0-255 wheel)
 │   ├── hid_sender.py               # Raw HID Communication
 │   └── main.py                     # CLI Entry Point
 ├── firmware/
@@ -73,6 +75,10 @@ pip install -r requirements.txt
     ```bash
     python -m moonlander_musicviz.main --screen
     ```
+    Add `--screen-monitor` (default `primary`) to pick a display, or `--screen-fps` to override the
+    capture rate. On Windows this uses the Desktop Duplication API for capture; see
+    [README_Windows.md](README_Windows.md#screen-color-sync) for details and the (unavoidable, OS-level)
+    limitation with DRM-protected video.
 
 ### 2. Firmware Side (Moonlander)
 
@@ -118,7 +124,10 @@ unaffected, and Keymapp can still flash the firmware.
 
 ## ⚠️ Notes
 
--   **Performance:** Screen capture is optimized (downsampled) to maintain ~30fps with minimal CPU usage.
+-   **Performance:** Screen capture runs on its own thread, decoupled from the audio loop, so it never
+    stalls the audio path. On Windows it captures via the Desktop Duplication API (~60fps, near-zero
+    CPU); the `mss` fallback used elsewhere is floored around one display-compositor frame per
+    capture (~12fps).
 
 <details>
 <summary><b>🎧 Audio Setup Details (macOS Stability)</b></summary>

@@ -120,3 +120,18 @@ class HIDSender:
         if self.dev:
             self.dev.close()
             self.dev = None
+
+
+class NullSender:
+    """
+    Drop-in replacement for HIDSender that discards packets.
+
+    Lets --simulator run without a keyboard attached: same send_packet/close
+    signature as HIDSender, so callers don't need to branch on which one they hold.
+    """
+
+    def send_packet(self, audio_features, hue_bass=160, hue_mid=40, hue_treble=220, saturation=255):
+        return True
+
+    def close(self):
+        pass

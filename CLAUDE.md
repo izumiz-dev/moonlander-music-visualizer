@@ -8,8 +8,9 @@ A host-side Python app that analyzes system audio (and optionally screen content
 RGB LEDs of a **ZSA Moonlander** keyboard over **QMK Raw HID**, plus the QMK C firmware effect that
 renders the packets. Two halves that must stay in sync:
 
-- `moonlander_musicviz/` — **Host** (Python 3.11): audio FFT, screen capture, palettes, HID sender,
-  terminal dashboard, LED simulator.
+- `moonlander_musicviz/` — **Host** (Python 3.11): audio FFT, screen capture (`screen_analyzer.py` +
+  `screen_backends.py`, threaded, mss/dxcam), circular hue math (`color_utils.py`), palettes, HID
+  sender, terminal dashboard, LED simulator.
 - `portable_musicviz/` — **Firmware library** (C, QMK custom RGB matrix effect). Source of truth for
   all on-keyboard rendering; distributable/injectable into any Oryx layout.
 - `firmware/oryx_source/` — drop zone for the user's Oryx export (gitignored input).
@@ -32,7 +33,7 @@ Manual equivalents:
 
 ```bash
 python -m moonlander_musicviz.main              # music mode
-python -m moonlander_musicviz.main --screen     # screen color sync (macOS path; unsupported on the Windows setup)
+python -m moonlander_musicviz.main --screen     # screen color sync (Windows and macOS both work)
 python -m moonlander_musicviz.main --simulator  # terminal simulator + JSONL debug log
 ```
 
@@ -84,6 +85,43 @@ Follow `.agent/workflows/led_logic_policy.md`. Short version:
 each LED's distance from its own half's *inner* edge (`max_left_x` / `min_right_x`), so waves expand
 outward identically regardless of how far apart the halves sit. Preserve this convention when adding
 effects — do not compute distance from a single global center.
+
+## Screen Color Sync architecture
+
+`--screen` captures the screen and sends its dominant color instead of an audio-derived palette.
+Host-only, cross-platform (macOS and Windows), no HID protocol change.
+
+- `moonlander_musicviz/screen_backends.py` defines the `ScreenCaptureBackend` contract
+  (`open`/`grab`/`close`) and the platform backends: `MssBackend` (GDI, all platforms) and
+  `DxcamBackend` (Windows Desktop Duplication API, auto-selected when available). `sys.platform` is
+  checked in exactly one place (`create_backend`) — a new backend is a new class plus one branch there.
+- `screen_analyzer.py`'s `ScreenAnalyzer` runs the backend inside its **own daemon thread**, decoupled
+  from the 30Hz audio loop in `main.py`. This is load-bearing: a synchronous `mss` grab() costs
+  40–150ms depending on monitor size, which would starve `sounddevice`'s ~21ms/block read budget if
+  called from the audio loop directly — not just delay the color, but make the audio itself glitchy.
+  The capture thread publishes the latest `(hue_bass, hue_mid, hue_treble, saturation)` as a single
+  atomic tuple assignment (`ScreenAnalyzer._latest`); `get_palette()` just reads it, non-blocking, no
+  lock. That's only safe because the tuple is always replaced whole — never mutate it in place or
+  publish its fields separately.
+- **"Primary display" is not "index 1."** mss's `monitors` list order is enumeration order, not
+  primary-first — on real hardware the true Windows-primary display has ended up at a different index
+  than `monitors[1]`. Both backends resolve `display_index=0` independently: `MssBackend` via the
+  Windows invariant that the primary display's origin is always the desktop's `(0, 0)`;
+  `DxcamBackend` via DXGI's own primary flag (`dxcam.output_info()`). If you touch monitor resolution,
+  verify both backends still agree on which physical display index `0` means.
+- **Saturation constants in `ScreenAnalyzer._extract_palette` are calibrated against real captured
+  desktop frames, not synthetic ones.** A visibly colorful real window measured
+  `chroma_strength` around 0.02–0.10 — much lower than a solid-color test frame, because the
+  extractor's `chroma^1.5 * value * center-window` weighting compounds multiplicatively. Thresholds
+  tuned only against synthetic solid frames leave ordinary content pinned near `SAT_FLOOR`, reading as
+  washed-out/pastel. LEDs also read visually whiter than the same value looks on a screen (diffusers,
+  keycaps), so the ramp is deliberately biased toward saturating quickly. If retuning, capture a real
+  frame and check `extract_screen_color(frame)['chroma_strength']` — don't guess from synthetic frames.
+- Hue is a value on a 256-point wheel, not a plain scalar — averaging/lerping/clamping it directly is
+  wrong across the 0/255 wrap. Everything that touches hue goes through `color_utils.py`'s circular
+  helpers (`hue_delta`, `hue_lerp`, `hue_to_vec`/`vec_to_hue`, `circular_smooth`).
+- Known, unavoidable limitation: DRM-protected video (Netflix, Prime Video, Disney+) captures as black
+  under both GDI and Desktop Duplication — an OS-level content-protection behavior, not a bug here.
 
 ## Build-script behaviors worth knowing
 

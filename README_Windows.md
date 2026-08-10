@@ -78,7 +78,33 @@ mise run live
 python -m moonlander_musicviz.main
 ```
 
-*(Note: Screen Sync mode is disabled/unsupported in this configuration)*
+### Screen Color Sync
+
+The keyboard LEDs follow your screen's dominant color instead of the audio. Screen capture runs on
+a background thread (via [dxcam](https://github.com/ra1nty/DXcam), Windows' Desktop Duplication API,
+with an automatic fallback to `mss` if dxcam is unavailable), so it doesn't compete with the audio
+loop for CPU time.
+
+```powershell
+mise run live --screen
+# or: python -m moonlander_musicviz.main --screen
+```
+
+Options:
+
+*   `--screen-monitor` — which display to capture. `primary` (the default) follows whichever monitor
+    Windows currently considers primary; pass a 0-based index (`1`, `2`, ...) to pick a secondary
+    display instead.
+*   `--screen-fps` — override the capture rate (default: backend-recommended, ~60Hz for dxcam,
+    ~12Hz for the `mss` fallback).
+
+The dashboard's SCENE label shows which backend is active, e.g. `Screen Sync (dxcam)`. If it instead
+shows `Screen Sync (mss)` or `Screen Sync (failed)`, dxcam couldn't be used (see below) and screen
+sync is running on the slower fallback or not at all.
+
+> **DRM-protected video captures as black.** Netflix, Prime Video, Disney+, and similar services
+> block screen capture at the OS level — this applies to both Desktop Duplication and GDI, so there
+> is no workaround. Ordinary video (YouTube, local files) captures fine.
 
 ---
 

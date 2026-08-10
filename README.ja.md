@@ -22,7 +22,9 @@
 .
 ├── moonlander_musicviz/            # [ホスト] Python アプリ
 │   ├── audio_analyzer.py           # FFT ロジック
-│   ├── screen_analyzer.py          # 画面キャプチャと色抽出
+│   ├── screen_analyzer.py          # 画面キャプチャの統括と色抽出
+│   ├── screen_backends.py          # 画面キャプチャのバックエンド (mss, Windows では dxcam)
+│   ├── color_utils.py              # 円環 hue の演算 (0-255 の輪の上での平均化・平滑化)
 │   ├── hid_sender.py               # Raw HID 通信
 │   └── main.py                     # CLI エントリーポイント
 ├── firmware/
@@ -62,6 +64,10 @@ pip install -r requirements.txt
     ```bash
     python -m moonlander_musicviz.main --screen
     ```
+    `--screen-monitor`（既定値 `primary`）でキャプチャするディスプレイを、`--screen-fps` で
+    キャプチャ頻度を指定できます。Windows では Desktop Duplication API を使ってキャプチャします。
+    詳細と DRM 保護動画に関する（回避不能な、OSレベルの）制約については
+    [README_Windows.ja.md](README_Windows.ja.md#画面色シンク) を参照してください。
 
 ### 2. ファームウェア側 (Moonlander)
 

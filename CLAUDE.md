@@ -69,8 +69,6 @@ prefixed with a `0x00` report ID (33 bytes total) — already handled in `send_p
 
 ## Where logic belongs (Host vs Firmware)
 
-Follow `.agent/workflows/led_logic_policy.md`. Short version:
-
 - **Host (Python):** FFT, screen capture, palette selection, beat detection, anything needing buffers
   or system APIs. Send *high-level control parameters*.
 - **Firmware (C):** per-LED math, smoothing, geometry, high-frequency rendering.

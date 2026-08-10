@@ -31,11 +31,7 @@ zsa_moonlander_*_source.zip
 .idea/
 
 # serena
-
-.serena/*
-
-!.serena/project.yml
-!.serena/memories/
+.serena/
 
 # Simulator Logs
 .log/
